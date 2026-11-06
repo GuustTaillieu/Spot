@@ -27,7 +27,7 @@
   "Keyboard Shortcuts": "Tastaturgenveje",
   "Quit Spot": "Afslut Spot",
   "%n songs": {
-    "one": "%n sang",
-    "other": "%n sange"
+    "one": "%1 sang",
+    "other": "%1 sange"
   }
 }

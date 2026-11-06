@@ -444,7 +444,7 @@ void Backend::startSpotifyAuth() {
     query.addQueryItem("redirect_uri", "http://127.0.0.1:8888/callback");
     query.addQueryItem("code_challenge_method", "S256");
     query.addQueryItem("code_challenge", challenge);
-    query.addQueryItem("scope", "playlist-read-private playlist-modify-public playlist-modify-private user-library-read user-library-modify");
+    query.addQueryItem("scope", "playlist-read-private playlist-read-collaborative playlist-modify-public playlist-modify-private user-library-read user-library-modify");
     url.setQuery(query);
 
     setStatusText(tr("Opening browser for Spotify authorization..."));
@@ -600,7 +600,14 @@ void Backend::fetchSpotifyPlaylists() {
                 QVariantMap map;
                 map["id"] = pl.value("id").toString();
                 map["name"] = pl.value("name").toString();
-                map["tracksCount"] = pl.value("tracks").toObject().value("total").toInt();
+
+                int count = 0;
+                if (pl.contains("items") && pl.value("items").isObject()) {
+                    count = pl.value("items").toObject().value("total").toInt();
+                } else if (pl.contains("tracks") && pl.value("tracks").isObject()) {
+                    count = pl.value("tracks").toObject().value("total").toInt();
+                }
+                map["tracksCount"] = count;
 
                 QString imgUrl;
                 const auto images = pl.value("images").toArray();
@@ -627,7 +634,18 @@ void Backend::searchSpotifyTrack(const QString &title, const QString &artist) {
     if (!m_spotifyConnected || m_spotifyAccessToken.isEmpty())
         return;
 
-    const QString q = QString("track:%1 artist:%2").arg(title, artist);
+    auto cleanText = [](const QString &s) {
+        QString clean = s;
+        clean.remove(QRegularExpression(R"(\s*[\(\[].*?[\)\]])"));
+        clean.remove(QRegularExpression(R"(\s*-\s*.*)"));
+        return clean.trimmed();
+    };
+
+    const QString cleanTitle = cleanText(title);
+    const QString cleanArtist = cleanText(artist);
+
+    const QString q = QString("track:%1 artist:%2").arg(cleanTitle.isEmpty() ? title : cleanTitle,
+                                                        cleanArtist.isEmpty() ? artist : cleanArtist);
     QUrl url("https://api.spotify.com/v1/search");
     QUrlQuery query;
     query.addQueryItem("q", q);
@@ -639,15 +657,50 @@ void Backend::searchSpotifyTrack(const QString &title, const QString &artist) {
     req.setRawHeader("Authorization", "Bearer " + m_spotifyAccessToken.toUtf8());
 
     QNetworkReply *reply = m_network.get(req);
-    connect(reply, &QNetworkReply::finished, this, [this, reply]() {
+    connect(reply, &QNetworkReply::finished, this, [this, reply, title, artist]() {
         reply->deleteLater();
         if (reply->error() != QNetworkReply::NoError)
             return;
 
         const auto obj = QJsonDocument::fromJson(reply->readAll()).object();
         const auto items = obj.value("tracks").toObject().value("items").toArray();
-        if (items.isEmpty())
+        if (items.isEmpty()) {
+            // Broader search fallback
+            QUrl broadUrl("https://api.spotify.com/v1/search");
+            QUrlQuery broadQuery;
+            broadQuery.addQueryItem("q", title + " " + artist);
+            broadQuery.addQueryItem("type", "track");
+            broadQuery.addQueryItem("limit", "1");
+            broadUrl.setQuery(broadQuery);
+
+            QNetworkRequest broadReq(broadUrl);
+            broadReq.setRawHeader("Authorization", "Bearer " + m_spotifyAccessToken.toUtf8());
+            QNetworkReply *broadReply = m_network.get(broadReq);
+            connect(broadReply, &QNetworkReply::finished, this, [this, broadReply]() {
+                broadReply->deleteLater();
+                if (broadReply->error() != QNetworkReply::NoError)
+                    return;
+                const auto bObj = QJsonDocument::fromJson(broadReply->readAll()).object();
+                const auto bItems = bObj.value("tracks").toObject().value("items").toArray();
+                if (!bItems.isEmpty()) {
+                    const auto trk = bItems.first().toObject();
+                    m_currentTrack.spotifyId = trk.value("id").toString();
+                    m_currentTrack.spotifyUri = trk.value("uri").toString();
+                    m_currentTrack.spotifyUrl = trk.value("external_urls").toObject().value("spotify").toString();
+
+                    const auto alb = trk.value("album").toObject();
+                    if (m_currentTrack.album.isEmpty())
+                        m_currentTrack.album = alb.value("name").toString();
+                    const auto imgs = alb.value("images").toArray();
+                    if (!imgs.isEmpty() && m_currentTrack.coverUrl.isEmpty())
+                        m_currentTrack.coverUrl = imgs.first().toObject().value("url").toString();
+
+                    emit trackChanged();
+                    checkTrackPlaylists();
+                }
+            });
             return;
+        }
 
         const auto track = items.first().toObject();
         m_currentTrack.spotifyId = track.value("id").toString();
@@ -671,10 +724,14 @@ void Backend::checkTrackPlaylists() {
     if (!m_spotifyConnected || m_spotifyAccessToken.isEmpty() || m_currentTrack.spotifyId.isEmpty())
         return;
 
-    // 1. Check if track is liked (Saved in Library)
-    QUrl likedUrl("https://api.spotify.com/v1/me/tracks/contains");
+    const QString trackUri = m_currentTrack.spotifyUri.isEmpty()
+                           ? QString("spotify:track:%1").arg(m_currentTrack.spotifyId)
+                           : m_currentTrack.spotifyUri;
+
+    // 1. Check if track is in Library via /v1/me/library/contains?uris=...
+    QUrl likedUrl("https://api.spotify.com/v1/me/library/contains");
     QUrlQuery q;
-    q.addQueryItem("ids", m_currentTrack.spotifyId);
+    q.addQueryItem("uris", trackUri);
     likedUrl.setQuery(q);
 
     QNetworkRequest req(likedUrl);
@@ -692,12 +749,11 @@ void Backend::checkTrackPlaylists() {
         }
     });
 
-    // 2. Check each playlist if it contains this track
+    // 2. Check each playlist if it contains this track via /v1/playlists/{id}/items
     for (const auto &plVar : m_playlists) {
         const QString plId = plVar.toMap().value("id").toString();
-        QUrl plUrl(QString("https://api.spotify.com/v1/playlists/%1/tracks").arg(plId));
+        QUrl plUrl(QString("https://api.spotify.com/v1/playlists/%1/items").arg(plId));
         QUrlQuery plQuery;
-        plQuery.addQueryItem("fields", "items(track(id))");
         plQuery.addQueryItem("limit", "100");
         plUrl.setQuery(plQuery);
 
@@ -711,7 +767,14 @@ void Backend::checkTrackPlaylists() {
                 const auto items = QJsonDocument::fromJson(plReply->readAll()).object().value("items").toArray();
                 bool found = false;
                 for (const auto &it : items) {
-                    if (it.toObject().value("track").toObject().value("id").toString() == m_currentTrack.spotifyId) {
+                    const auto obj = it.toObject();
+                    QString trkId;
+                    if (obj.contains("item") && obj.value("item").isObject())
+                        trkId = obj.value("item").toObject().value("id").toString();
+                    else if (obj.contains("track") && obj.value("track").isObject())
+                        trkId = obj.value("track").toObject().value("id").toString();
+
+                    if (trkId == m_currentTrack.spotifyId) {
                         found = true;
                         break;
                     }
@@ -729,23 +792,27 @@ void Backend::checkTrackPlaylists() {
 }
 
 void Backend::toggleTrackInPlaylist(const QString &playlistId) {
-    if (!m_spotifyConnected || m_spotifyAccessToken.isEmpty() || m_currentTrack.spotifyUri.isEmpty())
+    if (!m_spotifyConnected || m_spotifyAccessToken.isEmpty() || m_currentTrack.spotifyId.isEmpty())
         return;
 
+    const QString trackUri = m_currentTrack.spotifyUri.isEmpty()
+                           ? QString("spotify:track:%1").arg(m_currentTrack.spotifyId)
+                           : m_currentTrack.spotifyUri;
+
     const bool isIn = m_trackPlaylistIds.contains(playlistId);
-    QUrl url(QString("https://api.spotify.com/v1/playlists/%1/tracks").arg(playlistId));
+    QUrl url(QString("https://api.spotify.com/v1/playlists/%1/items").arg(playlistId));
     QNetworkRequest req(url);
     req.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
     req.setRawHeader("Authorization", "Bearer " + m_spotifyAccessToken.toUtf8());
 
     if (isIn) {
         // Remove track
-        QJsonObject trackObj;
-        trackObj["uri"] = m_currentTrack.spotifyUri;
-        QJsonArray tracksArr;
-        tracksArr.append(trackObj);
+        QJsonObject itemObj;
+        itemObj["uri"] = trackUri;
+        QJsonArray itemsArr;
+        itemsArr.append(itemObj);
         QJsonObject root;
-        root["tracks"] = tracksArr;
+        root["items"] = itemsArr;
 
         QNetworkReply *reply = m_network.sendCustomRequest(req, "DELETE", QJsonDocument(root).toJson());
         connect(reply, &QNetworkReply::finished, this, [this, reply, playlistId]() {
@@ -754,12 +821,15 @@ void Backend::toggleTrackInPlaylist(const QString &playlistId) {
                 m_trackPlaylistIds.removeAll(playlistId);
                 emit trackPlaylistsChanged();
                 setStatusText(tr("Removed from playlist."));
+                fetchSpotifyPlaylists();
+            } else {
+                setStatusText(tr("Failed to remove from playlist: %1").arg(reply->errorString()));
             }
         });
     } else {
         // Add track
         QJsonArray urisArr;
-        urisArr.append(m_currentTrack.spotifyUri);
+        urisArr.append(trackUri);
         QJsonObject root;
         root["uris"] = urisArr;
 
@@ -771,6 +841,9 @@ void Backend::toggleTrackInPlaylist(const QString &playlistId) {
                     m_trackPlaylistIds.append(playlistId);
                 emit trackPlaylistsChanged();
                 setStatusText(tr("Added to playlist!"));
+                fetchSpotifyPlaylists();
+            } else {
+                setStatusText(tr("Failed to add to playlist: %1").arg(reply->errorString()));
             }
         });
     }
@@ -780,9 +853,13 @@ void Backend::toggleLikedSongs() {
     if (!m_spotifyConnected || m_spotifyAccessToken.isEmpty() || m_currentTrack.spotifyId.isEmpty())
         return;
 
-    QUrl url("https://api.spotify.com/v1/me/tracks");
+    const QString trackUri = m_currentTrack.spotifyUri.isEmpty()
+                           ? QString("spotify:track:%1").arg(m_currentTrack.spotifyId)
+                           : m_currentTrack.spotifyUri;
+
+    QUrl url("https://api.spotify.com/v1/me/library");
     QUrlQuery q;
-    q.addQueryItem("ids", m_currentTrack.spotifyId);
+    q.addQueryItem("uris", trackUri);
     url.setQuery(q);
 
     QNetworkRequest req(url);
@@ -796,10 +873,11 @@ void Backend::toggleLikedSongs() {
                 m_isTrackLiked = false;
                 emit trackPlaylistsChanged();
                 setStatusText(tr("Removed from Liked Songs."));
+            } else {
+                setStatusText(tr("Failed to update Liked Songs: %1").arg(reply->errorString()));
             }
         });
     } else {
-        req.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
         QNetworkReply *reply = m_network.put(req, QByteArray());
         connect(reply, &QNetworkReply::finished, this, [this, reply]() {
             reply->deleteLater();
@@ -807,6 +885,8 @@ void Backend::toggleLikedSongs() {
                 m_isTrackLiked = true;
                 emit trackPlaylistsChanged();
                 setStatusText(tr("Added to Liked Songs!"));
+            } else {
+                setStatusText(tr("Failed to update Liked Songs: %1").arg(reply->errorString()));
             }
         });
     }

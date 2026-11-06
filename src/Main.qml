@@ -829,7 +829,7 @@ ApplicationWindow {
                                         }
 
                                         Text {
-                                            text: qsTr("%n songs", "", modelData.tracksCount || 0)
+                                            text: qsTr("%n songs", "", modelData.tracksCount || 0).arg(modelData.tracksCount || 0)
                                             color: "#888888"
                                             font.pixelSize: 11
                                         }

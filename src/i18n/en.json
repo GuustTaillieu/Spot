@@ -1,6 +1,6 @@
 {
   "%n songs": {
-    "one": "%n song",
-    "other": "%n songs"
+    "one": "%1 song",
+    "other": "%1 songs"
   }
 }
