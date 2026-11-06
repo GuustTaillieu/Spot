@@ -21,10 +21,24 @@ ApplicationWindow {
     property bool playlistDialogVisible: false
     property bool settingsDialogVisible: false
 
+    // Connections from C++ Backend (Tray activate, etc.)
+    Connections {
+        target: backend
+        function onRequestShowWindow() {
+            win.show()
+            win.raise()
+            win.requestActivate()
+        }
+        function onRequestHideWindow() {
+            win.hide()
+        }
+    }
+
     // Keyboard Shortcuts
     Shortcut { sequence: "?"; context: Qt.ApplicationShortcut; onActivated: win.helpVisible = !win.helpVisible }
     Shortcut { sequence: "Q"; context: Qt.ApplicationShortcut; onActivated: Qt.quit() }
     Shortcut { sequence: "Space"; context: Qt.ApplicationShortcut; onActivated: backend.primaryAction() }
+    Shortcut { sequence: "Ctrl+B"; context: Qt.ApplicationShortcut; onActivated: backend.runInBackground() }
     Shortcut {
         sequence: "Escape"
         context: Qt.ApplicationShortcut
@@ -152,6 +166,59 @@ ApplicationWindow {
                         verticalAlignment: Text.AlignVCenter
                     }
                     onClicked: win.settingsDialogVisible = true
+                }
+
+                // Continuous Auto-Listen Toggle
+                Button {
+                    id: contBtn
+                    text: backend.continuousListening ? qsTr("Auto-Listen: ON") : qsTr("Auto-Listen: OFF")
+                    ToolTip.visible: hovered
+                    ToolTip.text: qsTr("Automatically keep identifying songs continuously")
+                    background: Rectangle {
+                        color: backend.continuousListening ? "#2b2318" : "#18181c"
+                        radius: Math.min(6, theme.radius)
+                        border.color: backend.continuousListening ? theme.accent : "#2b2b2b"
+                        border.width: 1
+                    }
+                    contentItem: Text {
+                        text: contBtn.text
+                        color: backend.continuousListening ? theme.accent : "#888888"
+                        font.pixelSize: 12
+                        font.bold: true
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
+                    }
+                    onClicked: backend.continuousListening = !backend.continuousListening
+                }
+
+                // Run in Background Button
+                Button {
+                    id: bgBtn
+                    text: qsTr("Background")
+                    ToolTip.visible: hovered
+                    ToolTip.text: qsTr("Hide to tray and keep listening in the background (Ctrl+B)")
+                    background: Rectangle {
+                        color: parent.down ? "#33333a" : parent.hovered ? "#24242c" : "#1a1a20"
+                        radius: Math.min(6, theme.radius)
+                        border.color: "#333340"
+                        border.width: 1
+                    }
+                    contentItem: RowLayout {
+                        spacing: 6
+                        Text {
+                            text: "⤓"
+                            color: theme.accent
+                            font.pixelSize: 13
+                            font.bold: true
+                        }
+                        Text {
+                            text: bgBtn.text
+                            color: "#FAFCFB"
+                            font.pixelSize: 13
+                            font.bold: true
+                        }
+                    }
+                    onClicked: backend.runInBackground()
                 }
 
                 // Help Button
@@ -596,11 +663,20 @@ ApplicationWindow {
                         radius: Math.min(6, theme.radius)
                         color: rowMouse.containsMouse ? "#202024" : "transparent"
 
+                        MouseArea {
+                            id: rowMouse
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: backend.selectHistoryTrack(index)
+                        }
+
                         RowLayout {
                             anchors.fill: parent
                             anchors.leftMargin: 12
                             anchors.rightMargin: 12
                             spacing: 14
+                            z: 1
 
                             Text {
                                 text: (index + 1).toString()
@@ -659,19 +735,10 @@ ApplicationWindow {
                                 text: qsTr("Load")
                                 onClicked: backend.selectHistoryTrack(index)
                                 background: Rectangle {
-                                    color: parent.hovered ? "#333333" : "#222222"
+                                    color: parent.down ? "#444444" : parent.hovered ? "#333333" : "#222222"
                                     radius: Math.min(4, theme.radius)
                                 }
                             }
-                        }
-
-                        MouseArea {
-                            id: rowMouse
-                            anchors.fill: parent
-                            hoverEnabled: true
-                            cursorShape: Qt.PointingHandCursor
-                            propagateComposedEvents: true
-                            onDoubleClicked: backend.selectHistoryTrack(index)
                         }
                     }
 
@@ -1039,6 +1106,9 @@ ApplicationWindow {
 
                         Text { text: "Space"; font.bold: true; color: theme.accent; font.pixelSize: 14 }
                         Text { text: qsTr("Identify song / Stop listening"); color: "#FAFCFB"; font.pixelSize: 14 }
+
+                        Text { text: "Ctrl+B"; font.bold: true; color: theme.accent; font.pixelSize: 14 }
+                        Text { text: qsTr("Run in background (tray)"); color: "#FAFCFB"; font.pixelSize: 14 }
 
                         Text { text: "?"; font.bold: true; color: theme.accent; font.pixelSize: 14 }
                         Text { text: qsTr("Toggle shortcuts help"); color: "#FAFCFB"; font.pixelSize: 14 }

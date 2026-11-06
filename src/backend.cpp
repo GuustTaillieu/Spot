@@ -1,5 +1,6 @@
 #include "backend.h"
 
+#include <QAction>
 #include <QCryptographicHash>
 #include <QDesktopServices>
 #include <QDir>
@@ -10,6 +11,7 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QMenu>
 #include <QNetworkRequest>
 #include <QRandomGenerator>
 #include <QRegularExpression>
@@ -112,6 +114,7 @@ Backend::Backend(QObject *parent) : QObject(parent) {
     refreshAudioDevices();
     loadSettings();
     loadHistory();
+    initTray();
 
     if (m_spotifyConnected && !m_spotifyAccessToken.isEmpty()) {
         fetchSpotifyUserProfile();
@@ -131,6 +134,75 @@ Backend::~Backend() {
     if (m_authServer.isListening()) {
         m_authServer.close();
     }
+}
+
+void Backend::setContinuousListening(bool enable) {
+    if (m_continuousListening != enable) {
+        m_continuousListening = enable;
+        emit continuousListeningChanged();
+        if (m_continuousListening && !m_isListening) {
+            startListening();
+        }
+    }
+}
+
+void Backend::runInBackground() {
+    setContinuousListening(true);
+    emit requestHideWindow();
+    showDesktopNotification(tr("Spot"), tr("Running in background. Click tray icon to open."));
+    if (!m_isListening) {
+        startListening();
+    }
+}
+
+void Backend::initTray() {
+    if (!QSystemTrayIcon::isSystemTrayAvailable())
+        return;
+
+    m_trayIcon = new QSystemTrayIcon(this);
+    QIcon icon = QIcon::fromTheme("spot", QIcon(":/spot.svg"));
+    m_trayIcon->setIcon(icon);
+    m_trayIcon->setToolTip(tr("Spot — Song Identifier"));
+
+    connect(m_trayIcon, &QSystemTrayIcon::activated, this, [this](QSystemTrayIcon::ActivationReason reason) {
+        if (reason == QSystemTrayIcon::Trigger || reason == QSystemTrayIcon::DoubleClick) {
+            emit requestShowWindow();
+        }
+    });
+
+    QMenu *trayMenu = new QMenu();
+    QAction *showAct = trayMenu->addAction(tr("Open Spot"));
+    connect(showAct, &QAction::triggered, this, [this]() {
+        emit requestShowWindow();
+    });
+
+    QAction *listenAct = trayMenu->addAction(tr("Identify Now"));
+    connect(listenAct, &QAction::triggered, this, [this]() {
+        startListening();
+    });
+
+    QAction *contAct = trayMenu->addAction(tr("Continuous Listening"));
+    contAct->setCheckable(true);
+    contAct->setChecked(m_continuousListening);
+    connect(contAct, &QAction::toggled, this, &Backend::setContinuousListening);
+    connect(this, &Backend::continuousListeningChanged, contAct, [this, contAct]() {
+        contAct->setChecked(m_continuousListening);
+    });
+
+    trayMenu->addSeparator();
+
+    QAction *quitAct = trayMenu->addAction(tr("Quit"));
+    connect(quitAct, &QAction::triggered, qApp, &QCoreApplication::quit);
+
+    m_trayIcon->setContextMenu(trayMenu);
+    m_trayIcon->show();
+}
+
+void Backend::showDesktopNotification(const QString &title, const QString &message) {
+    if (m_trayIcon && m_trayIcon->isVisible()) {
+        m_trayIcon->showMessage(title, message, QIcon::fromTheme("spot", QIcon(":/spot.svg")), 4000);
+    }
+    QProcess::startDetached("notify-send", {"-i", "spot", "-a", "Spot", title, message});
 }
 
 void Backend::setStatusText(const QString &text) {
@@ -263,6 +335,12 @@ void Backend::onFfmpegFinished(int exitCode, QProcess::ExitStatus) {
         m_isListening = false;
         emit isListeningChanged();
         setStatusText(tr("Audio recording failed. Check microphone permissions."));
+        if (m_continuousListening) {
+            QTimer::singleShot(5000, this, [this]() {
+                if (m_continuousListening && !m_isListening)
+                    startListening();
+            });
+        }
         return;
     }
 
@@ -276,29 +354,41 @@ void Backend::onSongrecFinished(int exitCode, QProcess::ExitStatus) {
 
     if (exitCode != 0) {
         setStatusText(tr("Recognition error occurred."));
-        return;
+    } else {
+        const QByteArray output = m_songrecProcess.readAllStandardOutput();
+        TrackInfo recognized = TrackInfo::fromShazamJson(output);
+
+        if (recognized.title.isEmpty()) {
+            setStatusText(tr("No match found. Try again closer to the speaker."));
+        } else {
+            const bool isNewTrack = (recognized.title != m_currentTrack.title || recognized.artist != m_currentTrack.artist);
+
+            m_currentTrack = recognized;
+            m_hasTrack = true;
+            m_isTrackLiked = false;
+            m_trackPlaylistIds.clear();
+            emit trackPlaylistsChanged();
+            emit trackChanged();
+
+            setStatusText(tr("Found: %1 — %2").arg(recognized.title, recognized.artist));
+            addToHistory(recognized);
+
+            if (m_continuousListening && isNewTrack) {
+                showDesktopNotification(tr("Now Playing"), QString("%1 — %2").arg(recognized.title, recognized.artist));
+            }
+
+            if (m_spotifyConnected) {
+                searchSpotifyTrack(recognized.title, recognized.artist);
+            }
+        }
     }
 
-    const QByteArray output = m_songrecProcess.readAllStandardOutput();
-    TrackInfo recognized = TrackInfo::fromShazamJson(output);
-
-    if (recognized.title.isEmpty()) {
-        setStatusText(tr("No match found. Try again closer to the speaker."));
-        return;
-    }
-
-    m_currentTrack = recognized;
-    m_hasTrack = true;
-    m_isTrackLiked = false;
-    m_trackPlaylistIds.clear();
-    emit trackPlaylistsChanged();
-    emit trackChanged();
-
-    setStatusText(tr("Found: %1 — %2").arg(recognized.title, recognized.artist));
-    addToHistory(recognized);
-
-    if (m_spotifyConnected) {
-        searchSpotifyTrack(recognized.title, recognized.artist);
+    if (m_continuousListening) {
+        QTimer::singleShot(3500, this, [this]() {
+            if (m_continuousListening && !m_isListening) {
+                startListening();
+            }
+        });
     }
 }
 
@@ -332,6 +422,9 @@ void Backend::addToHistory(const TrackInfo &track) {
 
 void Backend::selectHistoryTrack(int index) {
     if (index >= 0 && index < m_history.size()) {
+        if (m_isListening) {
+            cancelListening();
+        }
         m_currentTrack = TrackInfo::fromMap(m_history.at(index).toMap());
         m_hasTrack = true;
         m_isTrackLiked = false;

@@ -11,6 +11,7 @@ Spot listens to your microphone or desktop audio monitor, identifies playing son
 - **Spotify Integration**: Open in Spotify, copy links, view album artwork, and check if tracks are in your Liked Songs.
 - **Playlist Sync**: Spotify-style green checkmark when saved; click to toggle adding/removing from any of your playlists.
 - **Omarchy Native**: Follows your Omarchy theme accent color and Hyprland window rounding live.
+- **Background Tray Mode**: Minimize Spot to the system tray with continuous listening; notifies you whenever a new song is detected.
 - **Multilingual**: Follows Omarchy system language live.
 - **History**: Keeps track of your recently discovered songs.
 
@@ -19,6 +20,7 @@ Spot listens to your microphone or desktop audio monitor, identifies playing son
 | Shortcut | Action |
 | :--- | :--- |
 | `Space` | Identify song / Stop listening |
+| `Ctrl+B` | Minimize to system tray and run in background |
 | `?` | Toggle shortcuts cheat sheet |
 | `Esc` | Close open dialogs or cancel listening |
 | `Q` | Quit Spot |

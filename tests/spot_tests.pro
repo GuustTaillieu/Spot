@@ -1,4 +1,4 @@
-QT += core gui quick quickcontrols2 testlib dbus network
+QT += core gui quick quickcontrols2 widgets svg testlib dbus network
 CONFIG += c++17 testcase
 TARGET = spot_tests
 TEMPLATE = app

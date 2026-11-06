@@ -1,4 +1,4 @@
-QT += core gui qml quick quickcontrols2 dbus network
+QT += core gui qml quick quickcontrols2 widgets svg dbus network
 
 CONFIG += c++17 release
 TARGET = spot

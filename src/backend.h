@@ -5,6 +5,7 @@
 #include <QNetworkReply>
 #include <QObject>
 #include <QProcess>
+#include <QSystemTrayIcon>
 #include <QTcpServer>
 #include <QTimer>
 #include <QVariantList>
@@ -32,6 +33,7 @@ class Backend : public QObject {
 
     // Recognition & Audio properties
     Q_PROPERTY(bool isListening READ isListening NOTIFY isListeningChanged)
+    Q_PROPERTY(bool continuousListening READ continuousListening WRITE setContinuousListening NOTIFY continuousListeningChanged)
     Q_PROPERTY(QString statusText READ statusText NOTIFY statusTextChanged)
     Q_PROPERTY(QVariantList audioDevices READ audioDevices NOTIFY audioDevicesChanged)
     Q_PROPERTY(int selectedDeviceIndex READ selectedDeviceIndex WRITE setSelectedDeviceIndex NOTIFY selectedDeviceIndexChanged)
@@ -65,6 +67,8 @@ public:
     ~Backend() override;
 
     bool isListening() const { return m_isListening; }
+    bool continuousListening() const { return m_continuousListening; }
+    void setContinuousListening(bool enable);
     QString statusText() const { return m_statusText; }
     QVariantList audioDevices() const { return m_audioDevices; }
     int selectedDeviceIndex() const { return m_selectedDeviceIndex; }
@@ -97,6 +101,7 @@ public:
     Q_INVOKABLE void startListening();
     Q_INVOKABLE void cancelListening();
     Q_INVOKABLE void refreshAudioDevices();
+    Q_INVOKABLE void runInBackground();
 
     Q_INVOKABLE void openSpotify();
     Q_INVOKABLE void copySpotifyLink();
@@ -113,6 +118,9 @@ public:
 
 signals:
     void isListeningChanged();
+    void continuousListeningChanged();
+    void requestShowWindow();
+    void requestHideWindow();
     void statusTextChanged();
     void audioDevicesChanged();
     void selectedDeviceIndexChanged();
@@ -142,14 +150,19 @@ private:
     void fetchSpotifyPlaylists();
     void fetchSpotifyUserProfile();
     void refreshSpotifyToken();
+    void initTray();
+    void showDesktopNotification(const QString &title, const QString &message);
 
     bool m_isListening = false;
+    bool m_continuousListening = false;
     QString m_statusText;
     QVariantList m_audioDevices;
     int m_selectedDeviceIndex = 0;
 
     bool m_hasTrack = false;
     TrackInfo m_currentTrack;
+    QString m_lastNotifiedTitle;
+    QString m_lastNotifiedArtist;
 
     bool m_spotifyConnected = false;
     QString m_spotifyUser;
@@ -168,5 +181,6 @@ private:
     QProcess m_songrecProcess;
     QTcpServer m_authServer;
     QNetworkAccessManager m_network;
+    QSystemTrayIcon *m_trayIcon = nullptr;
     QString m_tempWavPath = "/tmp/spot_sample.wav";
 };
