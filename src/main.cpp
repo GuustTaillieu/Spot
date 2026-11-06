@@ -1,6 +1,6 @@
 // spot — Shazam song identification and Spotify sync for Omarchy
 
-#include <QGuiApplication>
+#include <QApplication>
 #include <QIcon>
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
@@ -12,7 +12,7 @@
 #include "translator.h"
 
 int main(int argc, char *argv[]) {
-    QGuiApplication app(argc, argv);
+    QApplication app(argc, argv);
     app.setApplicationName("spot");
     app.setApplicationVersion("0.1.0");
 
