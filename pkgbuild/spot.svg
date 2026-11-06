@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <rect width="64" height="64" rx="14" fill="#121214"/>
+  <rect x="2" y="2" width="60" height="60" rx="12" fill="#18181c" stroke="#b59790" stroke-width="1.5"/>
+  <!-- Spotify soundwaves / radar pulses -->
+  <path d="M18 24 C26 20, 38 20, 46 24" stroke="#1DB954" stroke-width="3.5" stroke-linecap="round" fill="none"/>
+  <path d="M21 32 C28 29, 36 29, 43 32" stroke="#b59790" stroke-width="3.5" stroke-linecap="round" fill="none"/>
+  <path d="M25 40 C30 38, 34 38, 39 40" stroke="#b59790" stroke-width="3.5" stroke-linecap="round" fill="none"/>
+  <circle cx="32" cy="48" r="3" fill="#1DB954"/>
+</svg>

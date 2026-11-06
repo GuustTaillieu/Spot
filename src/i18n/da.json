@@ -1,0 +1,33 @@
+{
+  "Spot": "Spot",
+  "Input:": "Input:",
+  "Refresh audio devices": "Genindlæs lydenheder",
+  "Connect Spotify": "Forbind Spotify",
+  "Spotify Connected": "Spotify forbundet",
+  "Spotify: %1": "Spotify: %1",
+  "Shortcuts": "Genveje",
+  "Listening for music...": "Lytter efter musik...",
+  "Cancel (Esc)": "Annuller (Esc)",
+  "Identify any song playing around you": "Genkend enhver sang der spiller omkring dig",
+  "Press Space or click the button above to listen": "Tryk på Mellemrum eller klik på knappen ovenfor for at lytte",
+  "RECOGNIZED TRACK": "GENKENDT SANG",
+  "Open in Spotify": "Åbn i Spotify",
+  "Add to playlist": "Føj til afspilningsliste",
+  "Added to playlists (click to view/change)": "Føjet til afspilningslister (klik for at se/ændre)",
+  "Liked Songs": "Sange, du kan lide",
+  "Save to Liked Songs": "Gem i Sange, du kan lide",
+  "In Liked Songs": "I Sange, du kan lide",
+  "Copy Link": "Kopiér link",
+  "Listen Again (Space)": "Lyt igen (Mellemrum)",
+  "Recently Identified": "Nyligt genkendt",
+  "Clear History": "Ryd historik",
+  "Your Playlists": "Dine afspilningslister",
+  "Done": "Færdig",
+  "Close": "Luk",
+  "Keyboard Shortcuts": "Tastaturgenveje",
+  "Quit Spot": "Afslut Spot",
+  "%n songs": {
+    "one": "%n sang",
+    "other": "%n sange"
+  }
+}

@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Spot
+Name[da]=Spot
+Comment=Identify songs and sync to Spotify
+Comment[da]=Genkend sange og synkroniser til Spotify
+Exec=spot %f
+Icon=spot
+Terminal=false
+Categories=Audio;AudioVideo;
+StartupWMClass=spot

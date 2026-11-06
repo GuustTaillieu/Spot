@@ -1,0 +1,27 @@
+#!/bin/sh
+set -eu
+
+ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
+"$ROOT/bin/build"
+
+# Install to user application directories so it is immediately available in the launcher
+mkdir -p "$HOME/.local/bin"
+mkdir -p "$HOME/.local/share/applications"
+mkdir -p "$HOME/.local/share/icons/hicolor/scalable/apps"
+
+install -m755 "$ROOT/build/spot" "$HOME/.local/bin/spot"
+install -m644 "$ROOT/pkgbuild/spot.desktop" "$HOME/.local/share/applications/spot.desktop"
+install -m644 "$ROOT/pkgbuild/spot.svg" "$HOME/.local/share/icons/hicolor/scalable/apps/spot.svg"
+
+if which update-desktop-database >/dev/null 2>&1; then
+    update-desktop-database "$HOME/.local/share/applications" 2>/dev/null || true
+fi
+
+cd "$ROOT/pkgbuild"
+if [ "$#" -gt 0 ]; then
+    makepkg "$@"
+else
+    makepkg -f
+fi
+
+echo "Spot successfully installed and registered in the application launcher."
