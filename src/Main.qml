@@ -32,6 +32,15 @@ ApplicationWindow {
         function onRequestHideWindow() {
             win.hide()
         }
+        function onRequestToggleWindow() {
+            if (win.visible) {
+                win.hide()
+            } else {
+                win.show()
+                win.raise()
+                win.requestActivate()
+            }
+        }
     }
 
     // Keyboard Shortcuts
@@ -168,39 +177,16 @@ ApplicationWindow {
                     onClicked: win.settingsDialogVisible = true
                 }
 
-                // Continuous Auto-Listen Toggle
+                // Auto-Listen Button (Enables continuous recognition and hides to system tray)
                 Button {
-                    id: contBtn
-                    text: backend.continuousListening ? qsTr("Auto-Listen: ON") : qsTr("Auto-Listen: OFF")
+                    id: autoBtn
+                    text: backend.continuousListening ? qsTr("Auto: ON (Hide)") : qsTr("Auto-Listen (Tray)")
                     ToolTip.visible: hovered
-                    ToolTip.text: qsTr("Automatically keep identifying songs continuously")
+                    ToolTip.text: qsTr("Enable continuous recognition and hide Spot to tray (Ctrl+B)")
                     background: Rectangle {
-                        color: backend.continuousListening ? "#2b2318" : "#18181c"
+                        color: backend.continuousListening ? "#2b2318" : (parent.hovered ? "#24242c" : "#1a1a20")
                         radius: Math.min(6, theme.radius)
-                        border.color: backend.continuousListening ? theme.accent : "#2b2b2b"
-                        border.width: 1
-                    }
-                    contentItem: Text {
-                        text: contBtn.text
-                        color: backend.continuousListening ? theme.accent : "#888888"
-                        font.pixelSize: 12
-                        font.bold: true
-                        horizontalAlignment: Text.AlignHCenter
-                        verticalAlignment: Text.AlignVCenter
-                    }
-                    onClicked: backend.continuousListening = !backend.continuousListening
-                }
-
-                // Run in Background Button
-                Button {
-                    id: bgBtn
-                    text: qsTr("Background")
-                    ToolTip.visible: hovered
-                    ToolTip.text: qsTr("Hide to tray and keep listening in the background (Ctrl+B)")
-                    background: Rectangle {
-                        color: parent.down ? "#33333a" : parent.hovered ? "#24242c" : "#1a1a20"
-                        radius: Math.min(6, theme.radius)
-                        border.color: "#333340"
+                        border.color: backend.continuousListening ? theme.accent : "#333340"
                         border.width: 1
                     }
                     contentItem: RowLayout {
@@ -212,8 +198,8 @@ ApplicationWindow {
                             font.bold: true
                         }
                         Text {
-                            text: bgBtn.text
-                            color: "#FAFCFB"
+                            text: autoBtn.text
+                            color: backend.continuousListening ? theme.accent : "#FAFCFB"
                             font.pixelSize: 13
                             font.bold: true
                         }

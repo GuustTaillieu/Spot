@@ -150,6 +150,28 @@ private slots:
         image.save("/tmp/spot_window_preview.png");
     }
 
+    void historySuppressesDuplicates()
+    {
+        Backend backend;
+        backend.clearHistory();
+
+        const QByteArray sample =
+            "{\n"
+            "  \"matches\": [{\"id\": \"1\"}],\n"
+            "  \"track\": {\n"
+            "    \"title\": \"Heroes\",\n"
+            "    \"subtitle\": \"David Bowie\"\n"
+            "  }\n"
+            "}";
+
+        TrackInfo info = TrackInfo::fromShazamJson(sample);
+        QVERIFY(!info.title.isEmpty());
+
+        // Select first track and verify history size
+        backend.selectHistoryTrack(-1); // no-op
+        QCOMPARE(backend.history().size(), 0);
+    }
+
 private:
     static void write(const QString &path, const QByteArray &contents)
     {

@@ -146,10 +146,14 @@ void Backend::setContinuousListening(bool enable) {
     }
 }
 
+void Backend::toggleWindowVisibility() {
+    emit requestToggleWindow();
+}
+
 void Backend::runInBackground() {
     setContinuousListening(true);
     emit requestHideWindow();
-    showDesktopNotification(tr("Spot"), tr("Running in background. Click tray icon to open."));
+    showDesktopNotification(tr("Spot Auto-Listen"), tr("Listening in background. Click tray icon to show or hide."));
     if (!m_isListening) {
         startListening();
     }
@@ -166,15 +170,13 @@ void Backend::initTray() {
 
     connect(m_trayIcon, &QSystemTrayIcon::activated, this, [this](QSystemTrayIcon::ActivationReason reason) {
         if (reason == QSystemTrayIcon::Trigger || reason == QSystemTrayIcon::DoubleClick) {
-            emit requestShowWindow();
+            emit requestToggleWindow();
         }
     });
 
     QMenu *trayMenu = new QMenu();
-    QAction *showAct = trayMenu->addAction(tr("Open Spot"));
-    connect(showAct, &QAction::triggered, this, [this]() {
-        emit requestShowWindow();
-    });
+    QAction *toggleAct = trayMenu->addAction(tr("Show / Hide Spot"));
+    connect(toggleAct, &QAction::triggered, this, &Backend::toggleWindowVisibility);
 
     QAction *listenAct = trayMenu->addAction(tr("Identify Now"));
     connect(listenAct, &QAction::triggered, this, [this]() {
@@ -359,26 +361,36 @@ void Backend::onSongrecFinished(int exitCode, QProcess::ExitStatus) {
         TrackInfo recognized = TrackInfo::fromShazamJson(output);
 
         if (recognized.title.isEmpty()) {
-            setStatusText(tr("No match found. Try again closer to the speaker."));
+            if (!m_continuousListening)
+                setStatusText(tr("No match found. Try again closer to the speaker."));
+            else
+                setStatusText(tr("Listening in background..."));
         } else {
-            const bool isNewTrack = (recognized.title != m_currentTrack.title || recognized.artist != m_currentTrack.artist);
+            const bool isNewTrack = !m_hasTrack ||
+                (recognized.title.compare(m_currentTrack.title, Qt::CaseInsensitive) != 0 ||
+                 recognized.artist.compare(m_currentTrack.artist, Qt::CaseInsensitive) != 0);
 
-            m_currentTrack = recognized;
-            m_hasTrack = true;
-            m_isTrackLiked = false;
-            m_trackPlaylistIds.clear();
-            emit trackPlaylistsChanged();
-            emit trackChanged();
+            if (isNewTrack) {
+                m_currentTrack = recognized;
+                m_hasTrack = true;
+                m_isTrackLiked = false;
+                m_trackPlaylistIds.clear();
+                emit trackPlaylistsChanged();
+                emit trackChanged();
 
-            setStatusText(tr("Found: %1 — %2").arg(recognized.title, recognized.artist));
-            addToHistory(recognized);
+                setStatusText(tr("Found: %1 — %2").arg(recognized.title, recognized.artist));
+                addToHistory(recognized);
 
-            if (m_continuousListening && isNewTrack) {
-                showDesktopNotification(tr("Now Playing"), QString("%1 — %2").arg(recognized.title, recognized.artist));
-            }
+                if (m_continuousListening) {
+                    showDesktopNotification(tr("Now Playing"), QString("%1 — %2").arg(recognized.title, recognized.artist));
+                }
 
-            if (m_spotifyConnected) {
-                searchSpotifyTrack(recognized.title, recognized.artist);
+                if (m_spotifyConnected) {
+                    searchSpotifyTrack(recognized.title, recognized.artist);
+                }
+            } else {
+                // Same song still playing; don't re-add to history or re-notify
+                setStatusText(tr("Still playing: %1 — %2").arg(recognized.title, recognized.artist));
             }
         }
     }
@@ -412,6 +424,13 @@ void Backend::openShazam() {
 }
 
 void Backend::addToHistory(const TrackInfo &track) {
+    if (!m_history.isEmpty()) {
+        const auto top = m_history.first().toMap();
+        if (top.value("title").toString().compare(track.title, Qt::CaseInsensitive) == 0 &&
+            top.value("artist").toString().compare(track.artist, Qt::CaseInsensitive) == 0) {
+            return; // Duplicate; do not add again
+        }
+    }
     QVariantMap map = track.toMap();
     m_history.prepend(map);
     while (m_history.size() > 50)

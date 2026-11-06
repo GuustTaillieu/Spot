@@ -102,6 +102,7 @@ public:
     Q_INVOKABLE void cancelListening();
     Q_INVOKABLE void refreshAudioDevices();
     Q_INVOKABLE void runInBackground();
+    Q_INVOKABLE void toggleWindowVisibility();
 
     Q_INVOKABLE void openSpotify();
     Q_INVOKABLE void copySpotifyLink();
@@ -121,6 +122,7 @@ signals:
     void continuousListeningChanged();
     void requestShowWindow();
     void requestHideWindow();
+    void requestToggleWindow();
     void statusTextChanged();
     void audioDevicesChanged();
     void selectedDeviceIndexChanged();
