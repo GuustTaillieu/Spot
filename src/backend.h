@@ -153,7 +153,8 @@ private:
     void fetchSpotifyUserProfile();
     void refreshSpotifyToken();
     void initTray();
-    void showDesktopNotification(const QString &title, const QString &message);
+    void notifyRecognizedTrack(const TrackInfo &track);
+    void showDesktopNotification(const QString &title, const QString &message, const QString &iconPath = "spot");
 
     bool m_isListening = false;
     bool m_continuousListening = false;

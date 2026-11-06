@@ -200,11 +200,53 @@ void Backend::initTray() {
     m_trayIcon->show();
 }
 
-void Backend::showDesktopNotification(const QString &title, const QString &message) {
-    if (m_trayIcon && m_trayIcon->isVisible()) {
-        m_trayIcon->showMessage(title, message, QIcon::fromTheme("spot", QIcon(":/spot.svg")), 4000);
+void Backend::notifyRecognizedTrack(const TrackInfo &track) {
+    const QString title = track.title;
+    QString message = track.artist;
+    if (!track.album.isEmpty()) {
+        message += QString(" • %1").arg(track.album);
     }
-    QProcess::startDetached("notify-send", {"-i", "spot", "-a", "Spot", title, message});
+
+    if (!track.coverUrl.isEmpty() && track.coverUrl.startsWith("http")) {
+        QNetworkRequest req(QUrl(track.coverUrl));
+        QNetworkReply *reply = m_network.get(req);
+        connect(reply, &QNetworkReply::finished, this, [this, reply, title, message]() {
+            reply->deleteLater();
+            QString iconPath = "spot";
+            if (reply->error() == QNetworkReply::NoError) {
+                const QByteArray data = reply->readAll();
+                const QString tempCoverPath = "/tmp/spot_current_cover.jpg";
+                QFile file(tempCoverPath);
+                if (file.open(QIODevice::WriteOnly) && file.write(data) > 0) {
+                    file.close();
+                    iconPath = tempCoverPath;
+                }
+            }
+            showDesktopNotification(title, message, iconPath);
+        });
+    } else {
+        showDesktopNotification(title, message, "spot");
+    }
+}
+
+void Backend::showDesktopNotification(const QString &title, const QString &message, const QString &iconPath) {
+    QIcon icon;
+    if (!iconPath.isEmpty() && iconPath != "spot" && QFile::exists(iconPath)) {
+        icon = QIcon(iconPath);
+    } else {
+        icon = QIcon::fromTheme("spot", QIcon(":/spot.svg"));
+    }
+
+    if (m_trayIcon && m_trayIcon->isVisible()) {
+        m_trayIcon->showMessage(title, message, icon, 5000);
+    }
+
+    QStringList args;
+    if (!iconPath.isEmpty()) {
+        args << "-i" << iconPath;
+    }
+    args << "-a" << "Spot" << title << message;
+    QProcess::startDetached("notify-send", args);
 }
 
 void Backend::setStatusText(const QString &text) {
@@ -381,9 +423,7 @@ void Backend::onSongrecFinished(int exitCode, QProcess::ExitStatus) {
                 setStatusText(tr("Found: %1 — %2").arg(recognized.title, recognized.artist));
                 addToHistory(recognized);
 
-                if (m_continuousListening) {
-                    showDesktopNotification(tr("Now Playing"), QString("%1 — %2").arg(recognized.title, recognized.artist));
-                }
+                notifyRecognizedTrack(recognized);
 
                 if (m_spotifyConnected) {
                     searchSpotifyTrack(recognized.title, recognized.artist);
